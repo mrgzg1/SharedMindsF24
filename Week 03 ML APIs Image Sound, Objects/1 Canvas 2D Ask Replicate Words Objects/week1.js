@@ -10,6 +10,7 @@ let responseWords = [];
 let promptWords = [];
 let mouseDown = false;
 let currentWord = -1;
+let isDragging = false;
 init();
 
 function init() {
@@ -211,6 +212,7 @@ function initInterface() {
             if (dist < 20) {
                 console.log("Clicked on ", thisResponseWord.word);
                 currentWord = i;
+                isDragging = true;
                 break;
             }
         }
@@ -218,20 +220,21 @@ function initInterface() {
 
     document.addEventListener('mousemove', (event) => {
         //move words around
-        if (mouseDown && currentWord > 0) {
+        if (mouseDown && isDragging && currentWord >= 0) {
             let thisLocation = { x: event.clientX, y: event.clientY };
             responseWords[currentWord].location = thisLocation;
         }
-
     });
+
     document.addEventListener('mouseup', (event) => {
-        mouseDown = false
+        mouseDown = false;
+        isDragging = false;
     });
 
     // Add event listener to the document for double click event
     document.addEventListener('dblclick', (event) => {
         //ask for related words
-        if (currentWord > 0) {
+        if (currentWord >= 0) {
             let location = responseWords[currentWord].location;
             askWord(responseWords[currentWord].word, location);
         }
