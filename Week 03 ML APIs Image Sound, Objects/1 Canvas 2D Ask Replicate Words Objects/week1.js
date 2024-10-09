@@ -25,14 +25,45 @@ function animate() {
     inputBox.style.left = inputLocationX + 'px';
     inputBox.style.top = inputLocationY + 'px';
     ctx.clearRect(0, 0, canvas.width, canvas.height);
+    
+    // Draw lines between prompt words and their response words
+    ctx.beginPath();
+    ctx.strokeStyle = 'rgba(200, 200, 200, 0.5)';
+    for (let i = 0; i < promptWords.length; i++) {
+        let promptWord = promptWords[i];
+        for (let j = 0; j < responseWords.length; j++) {
+            let responseWord = responseWords[j];
+            if (responseWord.prompt === promptWord.word) {
+                ctx.moveTo(promptWord.location.x, promptWord.location.y);
+                ctx.lineTo(responseWord.location.x, responseWord.location.y);
+            }
+        }
+    }
+    ctx.stroke();
+
     for (let i = 0; i < promptWords.length; i++) {
         let thisPromptWord = promptWords[i];
         let word = thisPromptWord.word;
         let location = thisPromptWord.location;
         ctx.font = '30px Arial';
-        ctx.fillStyle = 'red';
         let w = ctx.measureText(word).width;
-        ctx.fillText(word, location.x - w / 2, location.y);
+        let h = 30; // Approximate height of the font
+        
+        // Draw white circle background
+        ctx.beginPath();
+        ctx.arc(location.x, location.y, w / 2 + 15, 0, 2 * Math.PI);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        
+        // Draw circle outline
+        ctx.beginPath();
+        ctx.arc(location.x, location.y, w / 2 + 15, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'red';
+        ctx.stroke();
+        
+        // Draw text
+        ctx.fillStyle = 'red';
+        ctx.fillText(word, location.x - w / 2, location.y + h / 4);
     }
 
     for (let i = 0; i < responseWords.length; i++) {
@@ -40,9 +71,24 @@ function animate() {
         let word = thisResponseWord.word;
         let location = thisResponseWord.location;
         ctx.font = '24px Arial';
-        ctx.fillStyle = 'black';
         let w = ctx.measureText(word).width;
-        ctx.fillText(word, location.x - w / 2, location.y);
+        let h = 24; // Approximate height of the font
+        
+        // Draw white circle background
+        ctx.beginPath();
+        ctx.arc(location.x, location.y, w / 2 + 10, 0, 2 * Math.PI);
+        ctx.fillStyle = 'white';
+        ctx.fill();
+        
+        // Draw circle outline
+        ctx.beginPath();
+        ctx.arc(location.x, location.y, w / 2 + 10, 0, 2 * Math.PI);
+        ctx.strokeStyle = 'black';
+        ctx.stroke();
+        
+        // Draw text
+        ctx.fillStyle = 'black';
+        ctx.fillText(word, location.x - w / 2, location.y + h / 4);
     }
 
 
@@ -193,6 +239,3 @@ function initInterface() {
         console.log("Document double clicked");
     });
 }
-
-
-
