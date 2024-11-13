@@ -2,7 +2,7 @@ let video;
 let bodyPose;
 let poses = [];
 let poseHistory = []; // Array to store pose history
-const maxHistoryLength = 50; // Number of past poses to show
+const maxHistoryLength = 100; // Increased history length for smoother trails
 const blurRadius = 20; // Radius for blending poses
 let connections;
 let recordButton;
@@ -21,7 +21,7 @@ function setup() {
   // Set up Three.js scene
   scene = new THREE.Scene();
   camera3D = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
-  renderer = new THREE.WebGLRenderer();
+  renderer = new THREE.WebGLRenderer({ antialias: true }); // Enable antialiasing for smoother lines
   renderer.setSize(window.innerWidth, window.innerHeight);
   document.body.appendChild(renderer.domElement);
 
@@ -35,7 +35,7 @@ function setup() {
 
   // Create record/stop button
   recordButton = createButton('⏺RECORD');
-  recordButton.position(10, window.innerHeight - 50); // Moved button up slightly
+  recordButton.position(10, window.innerHeight - 50);
   recordButton.mousePressed(toggleRecording);
   recordButton.style('font-size', '24px');
   recordButton.style('padding', '5px 15px');
@@ -56,10 +56,10 @@ function setup() {
 function toggleRecording() {
   isRecording = !isRecording;
   if (isRecording) {
-    recordButton.html('⏹STOP'); // Stop symbol
-    poseHistory = []; // Clear history when starting new recording
+    recordButton.html('⏹STOP');
+    poseHistory = [];
   } else {
-    recordButton.html('⏺RECORD'); // Record symbol
+    recordButton.html('⏺RECORD');
   }
 }
 
@@ -70,7 +70,6 @@ function animate() {
 }
 
 function cleanupScene() {
-  // Remove all existing points and lines
   while(scene.children.length > 0) {
     const object = scene.children[0];
     if(object.geometry) object.geometry.dispose();
@@ -84,11 +83,9 @@ function cleanupScene() {
     scene.remove(object);
   }
   
-  // Clear arrays
   posePoints = [];
   poseLines = [];
   
-  // Re-add lights
   const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
   scene.add(ambientLight);
   const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
@@ -97,7 +94,7 @@ function cleanupScene() {
 }
 
 function updatePoses() {
-  // Properly dispose and remove old points and lines
+  // Cleanup previous frame
   posePoints.forEach(point => {
     if(point.geometry) point.geometry.dispose();
     if(point.material) point.material.dispose();
@@ -111,28 +108,34 @@ function updatePoses() {
   posePoints = [];
   poseLines = [];
 
-  // Draw historical poses first so they appear behind current pose
+  // Draw historical poses with smooth transitions
   if (isRecording && poseHistory.length > 0) {
     poseHistory.forEach((historicalPose, index) => {
-      const opacity = (index + 1) / poseHistory.length; // Fade based on age
+      const opacity = Math.pow((index + 1) / poseHistory.length, 2); // Quadratic fade for smoother transition
       
       if (historicalPose[0] && historicalPose[0].keypoints) {
-        // Draw historical skeleton
+        // Create smoothed lines between keypoints
         connections.forEach(connection => {
           const pointA = historicalPose[0].keypoints[connection[0]];
           const pointB = historicalPose[0].keypoints[connection[1]];
           
           if (pointA && pointB && pointA.confidence > 0.1 && pointB.confidence > 0.1) {
-            const material = new THREE.LineBasicMaterial({
-              color: 0x0000ff, // Blue for historical poses
-              transparent: true,
-              opacity: opacity * 0.3,
-              linewidth: 3 // Increased line thickness
-            });
-            const geometry = new THREE.BufferGeometry().setFromPoints([
+            // Create curved line between points
+            const curve = new THREE.QuadraticBezierCurve3(
               new THREE.Vector3(pointA.x - 320, -pointA.y + 240, 0),
+              new THREE.Vector3((pointA.x + pointB.x)/2 - 320, (-pointA.y - pointB.y)/2 + 240, 20), // Control point
               new THREE.Vector3(pointB.x - 320, -pointB.y + 240, 0)
-            ]);
+            );
+
+            const points = curve.getPoints(10);
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({
+              color: new THREE.Color(0.5, 0.8, 1), // Softer blue
+              transparent: true,
+              opacity: opacity * 0.4,
+              linewidth: 5 // Thicker lines
+            });
+            
             const line = new THREE.Line(geometry, material);
             scene.add(line);
             poseLines.push(line);
@@ -142,16 +145,19 @@ function updatePoses() {
     });
   }
 
-  // Draw current pose
+  // Draw current pose with thicker, smoother lines
   if (poses.length > 0 && connections && connections.length > 0) {
     const pose = poses[0];
     
-    // Draw keypoints
     if (pose.keypoints) {
+      // Draw keypoints as larger spheres
       pose.keypoints.forEach(keypoint => {
         if (keypoint.confidence > 0.1) {
-          const geometry = new THREE.SphereGeometry(5);
-          const material = new THREE.MeshPhongMaterial({color: 0x00ff00});
+          const geometry = new THREE.SphereGeometry(8); // Larger spheres
+          const material = new THREE.MeshPhongMaterial({
+            color: 0x00ff88,
+            emissive: 0x002211
+          });
           const sphere = new THREE.Mesh(geometry, material);
           sphere.position.set(keypoint.x - 320, -keypoint.y + 240, 0);
           scene.add(sphere);
@@ -159,20 +165,25 @@ function updatePoses() {
         }
       });
 
-      // Draw current skeleton
+      // Draw current skeleton with curved lines
       connections.forEach(connection => {
         const pointA = pose.keypoints[connection[0]];
         const pointB = pose.keypoints[connection[1]];
         
         if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
-          const material = new THREE.LineBasicMaterial({
-            color: 0xff0000,
-            linewidth: 3 // Increased line thickness
-          });
-          const geometry = new THREE.BufferGeometry().setFromPoints([
+          const curve = new THREE.QuadraticBezierCurve3(
             new THREE.Vector3(pointA.x - 320, -pointA.y + 240, 0),
+            new THREE.Vector3((pointA.x + pointB.x)/2 - 320, (-pointA.y - pointB.y)/2 + 240, 30),
             new THREE.Vector3(pointB.x - 320, -pointB.y + 240, 0)
-          ]);
+          );
+
+          const points = curve.getPoints(10);
+          const geometry = new THREE.BufferGeometry().setFromPoints(points);
+          const material = new THREE.LineBasicMaterial({
+            color: 0xff3366,
+            linewidth: 6
+          });
+          
           const line = new THREE.Line(geometry, material);
           scene.add(line);
           poseLines.push(line);
