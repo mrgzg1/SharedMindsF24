@@ -5,7 +5,6 @@ let poseHistory = []; // Array to store pose history
 const maxHistoryLength = 30; // Number of past poses to show
 const blurRadius = 20; // Radius for blending poses
 let connections;
-let keypointVelocities = {}; // Store velocities for each keypoint
 
 function preload() {
   bodyPose = ml5.bodyPose();
@@ -78,14 +77,8 @@ function drawBlendedPoseHistory() {
             let keypoint = pose.keypoints[j];
             if (keypoint && keypoint.confidence > 0.1) {
               let gradientSize = blurRadius * 1.5;
-              
-              // Get movement smoothness for this keypoint
-              let smoothness = getMovementSmoothness(j);
-              let keypointColor = smoothness < 0.7 ? color(255, 165, 0) : color(50, 255, 50); // Orange if jerky, green if smooth
-              
               for(let r = gradientSize; r > 0; r -= 2) {
-                let alphaValue = alpha * (r/gradientSize) * 0.1;
-                fill(red(keypointColor), green(keypointColor), blue(keypointColor), alphaValue);
+                fill(50, 255, 50, alpha * (r/gradientSize) * 0.1);
                 circle(keypoint.x, keypoint.y, r);
               }
             }
@@ -94,7 +87,7 @@ function drawBlendedPoseHistory() {
       }
     }
   }
-  blendMode(BLEND);
+  blendMode(BLEND); // Changed from NORMAL to BLEND
 }
 
 function drawPose(posesToDraw, opacity, isCurrent) {
@@ -124,9 +117,7 @@ function drawPose(posesToDraw, opacity, isCurrent) {
         for (let j = 0; j < pose.keypoints.length; j++) {
           let keypoint = pose.keypoints[j];
           if (keypoint && keypoint.confidence > 0.1) {
-            let smoothness = getMovementSmoothness(j);
-            let keypointColor = smoothness < 0.7 ? color(255, 165, 0) : color(0, 255, 0); // Orange if jerky, green if smooth
-            fill(red(keypointColor), green(keypointColor), blue(keypointColor), opacity * 255);
+            fill(0, 255, 0, opacity * 255);
             noStroke();
             circle(keypoint.x, keypoint.y, 10);
           }
@@ -136,45 +127,11 @@ function drawPose(posesToDraw, opacity, isCurrent) {
   }
 }
 
-function getMovementSmoothness(keypointIndex) {
-  if (poseHistory.length < 3) return 1; // Not enough history to calculate smoothness
-  
-  let recentPositions = [];
-  // Get last 3 positions of this keypoint
-  for (let i = poseHistory.length - 3; i < poseHistory.length; i++) {
-    if (poseHistory[i][0] && poseHistory[i][0].keypoints[keypointIndex]) {
-      recentPositions.push({
-        x: poseHistory[i][0].keypoints[keypointIndex].x,
-        y: poseHistory[i][0].keypoints[keypointIndex].y
-      });
-    }
-  }
-  
-  if (recentPositions.length < 3) return 1;
-  
-  // Calculate angles between consecutive segments
-  let angle1 = Math.atan2(
-    recentPositions[1].y - recentPositions[0].y,
-    recentPositions[1].x - recentPositions[0].x
-  );
-  let angle2 = Math.atan2(
-    recentPositions[2].y - recentPositions[1].y,
-    recentPositions[2].x - recentPositions[1].x
-  );
-  
-  // Calculate angle difference
-  let angleDiff = Math.abs(angle2 - angle1);
-  if (angleDiff > Math.PI) angleDiff = 2 * Math.PI - angleDiff;
-  
-  // Convert to smoothness value (0 to 1, where 1 is perfectly smooth)
-  return 1 - (angleDiff / Math.PI);
-}
-
 function gotPoses(results) {
   poses = results;
   if(results && results.length > 0) {
     // Add current poses to history
-    poseHistory.push(JSON.parse(JSON.stringify(results)));
+    poseHistory.push(JSON.parse(JSON.stringify(results))); // Store all poses, not just if previous poses exist
     // Keep only last n poses
     if(poseHistory.length > maxHistoryLength) {
       poseHistory.shift();
