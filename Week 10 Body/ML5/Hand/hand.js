@@ -5,134 +5,149 @@ let poseHistory = []; // Array to store pose history
 const maxHistoryLength = 30; // Number of past poses to show
 const blurRadius = 20; // Radius for blending poses
 let connections;
+let recordButton;
+let isRecording = false;
+
+// Three.js variables
+let camera3D, scene, renderer;
+let posePoints = [];
+let poseLines = [];
 
 function preload() {
   bodyPose = ml5.bodyPose();
 }
 
 function setup() {
-  createCanvas(640, 480);
+  // Set up Three.js scene
+  scene = new THREE.Scene();
+  camera3D = new THREE.PerspectiveCamera(50, window.innerWidth / window.innerHeight, 0.1, 1000);
+  renderer = new THREE.WebGLRenderer();
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  document.body.appendChild(renderer.domElement);
+
+  // Set up video capture
   video = createCapture(VIDEO);
   video.size(640, 480);
   video.hide();
 
   bodyPose.detectStart(video, gotPoses);
   connections = bodyPose.getSkeleton();
+
+  // Create record/stop button
+  recordButton = createButton('⏺️');
+  recordButton.position(10, window.innerHeight + 10);
+  recordButton.mousePressed(toggleRecording);
+  recordButton.style('font-size', '24px');
+  recordButton.style('padding', '5px 15px');
+
+  // Position camera
+  camera3D.position.z = 500;
+
+  // Add lights
+  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  scene.add(ambientLight);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 0.5);
+  directionalLight.position.set(0, 1, 1);
+  scene.add(directionalLight);
+
+  animate();
 }
 
-function draw() {
-  image(video, 0, 0, width, height);
-  
-  // Only draw poses if we have valid data
-  if (poses.length > 0 && connections && connections.length > 0) {
-    // Create a heat map effect with smooth transitions
-    drawBlendedPoseHistory();
-    
-    // Draw current pose on top
-    drawPose(poses, 1.0, true);
+function toggleRecording() {
+  isRecording = !isRecording;
+  if (isRecording) {
+    recordButton.html('⏹️'); // Stop symbol
+    poseHistory = []; // Clear history when starting new recording
+  } else {
+    recordButton.html('⏺️'); // Record symbol
   }
 }
 
-function drawBlendedPoseHistory() {
-  noStroke();
-  blendMode(ADD);
-  
-  // Draw each historical pose with a gradient
-  for(let i = 0; i < poseHistory.length; i++) {
-    let alpha = map(i, 0, poseHistory.length-1, 50, 150);
-    let historicalPoses = poseHistory[i];
+function animate() {
+  requestAnimationFrame(animate);
+  updatePoses();
+  renderer.render(scene, camera3D);
+}
+
+function updatePoses() {
+  // Remove old points and lines
+  posePoints.forEach(point => scene.remove(point));
+  poseLines.forEach(line => scene.remove(line));
+  posePoints = [];
+  poseLines = [];
+
+  if (poses.length > 0 && connections && connections.length > 0) {
+    // Draw current pose
+    const pose = poses[0];
     
-    // Draw each pose in this historical frame
-    for(let p = 0; p < historicalPoses.length; p++) {
-      let pose = historicalPoses[p];
-      
-      if (pose && connections) {
-        // Draw flowing connections
-        for (let j = 0; j < connections.length; j++) {
-          let pointAIndex = connections[j][0];
-          let pointBIndex = connections[j][1];
-          
-          if (pose.keypoints && pose.keypoints[pointAIndex] && pose.keypoints[pointBIndex]) {
-            let pointA = pose.keypoints[pointAIndex];
-            let pointB = pose.keypoints[pointBIndex];
+    // Draw keypoints
+    if (pose.keypoints) {
+      pose.keypoints.forEach(keypoint => {
+        if (keypoint.confidence > 0.1) {
+          const geometry = new THREE.SphereGeometry(5);
+          const material = new THREE.MeshPhongMaterial({color: 0x00ff00});
+          const sphere = new THREE.Mesh(geometry, material);
+          // Convert coordinates to Three.js space
+          sphere.position.set(keypoint.x - 320, -keypoint.y + 240, 0);
+          scene.add(sphere);
+          posePoints.push(sphere);
+        }
+      });
+
+      // Draw skeleton
+      connections.forEach(connection => {
+        const pointA = pose.keypoints[connection[0]];
+        const pointB = pose.keypoints[connection[1]];
+        
+        if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
+          const material = new THREE.LineBasicMaterial({color: 0xff0000});
+          const geometry = new THREE.BufferGeometry().setFromPoints([
+            new THREE.Vector3(pointA.x - 320, -pointA.y + 240, 0),
+            new THREE.Vector3(pointB.x - 320, -pointB.y + 240, 0)
+          ]);
+          const line = new THREE.Line(geometry, material);
+          scene.add(line);
+          poseLines.push(line);
+        }
+      });
+    }
+
+    // Draw history trails with fading effect
+    if (isRecording) {
+      poseHistory.forEach((historicalPoses, i) => {
+        const opacity = (i + 1) / poseHistory.length;
+        const pose = historicalPoses[0];
+        
+        if (pose && pose.keypoints) {
+          connections.forEach(connection => {
+            const pointA = pose.keypoints[connection[0]];
+            const pointB = pose.keypoints[connection[1]];
             
             if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
-              // Create gradient between points
-              let steps = 10;
-              for(let t = 0; t <= steps; t++) {
-                let x = lerp(pointA.x, pointB.x, t/steps);
-                let y = lerp(pointA.y, pointB.y, t/steps);
-                let size = map(t, 0, steps, blurRadius, blurRadius/2);
-                
-                fill(255, 50, 50, alpha/steps);
-                circle(x, y, size);
-              }
+              const material = new THREE.LineBasicMaterial({
+                color: 0xff0000,
+                transparent: true,
+                opacity: opacity * 0.5
+              });
+              const geometry = new THREE.BufferGeometry().setFromPoints([
+                new THREE.Vector3(pointA.x - 320, -pointA.y + 240, 0),
+                new THREE.Vector3(pointB.x - 320, -pointB.y + 240, 0)
+              ]);
+              const line = new THREE.Line(geometry, material);
+              scene.add(line);
+              poseLines.push(line);
             }
-          }
+          });
         }
-        
-        // Draw flowing keypoints
-        if (pose.keypoints) {
-          for (let j = 0; j < pose.keypoints.length; j++) {
-            let keypoint = pose.keypoints[j];
-            if (keypoint && keypoint.confidence > 0.1) {
-              let gradientSize = blurRadius * 1.5;
-              for(let r = gradientSize; r > 0; r -= 2) {
-                fill(50, 255, 50, alpha * (r/gradientSize) * 0.1);
-                circle(keypoint.x, keypoint.y, r);
-              }
-            }
-          }
-        }
-      }
-    }
-  }
-  blendMode(BLEND); // Changed from NORMAL to BLEND
-}
-
-function drawPose(posesToDraw, opacity, isCurrent) {
-  for (let i = 0; i < posesToDraw.length; i++) {
-    let pose = posesToDraw[i];
-    
-    if(isCurrent && pose && connections) {
-      // Draw current skeleton with solid lines
-      for (let j = 0; j < connections.length; j++) {
-        let pointAIndex = connections[j][0];
-        let pointBIndex = connections[j][1];
-        
-        if (pose.keypoints && pose.keypoints[pointAIndex] && pose.keypoints[pointBIndex]) {
-          let pointA = pose.keypoints[pointAIndex];
-          let pointB = pose.keypoints[pointBIndex];
-          
-          if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
-            stroke(255, 0, 0, opacity * 255);
-            strokeWeight(2);
-            line(pointA.x, pointA.y, pointB.x, pointB.y);
-          }
-        }
-      }
-      
-      // Draw current keypoints
-      if (pose.keypoints) {
-        for (let j = 0; j < pose.keypoints.length; j++) {
-          let keypoint = pose.keypoints[j];
-          if (keypoint && keypoint.confidence > 0.1) {
-            fill(0, 255, 0, opacity * 255);
-            noStroke();
-            circle(keypoint.x, keypoint.y, 10);
-          }
-        }
-      }
+      });
     }
   }
 }
 
 function gotPoses(results) {
   poses = results;
-  if(results && results.length > 0) {
-    // Add current poses to history
-    poseHistory.push(JSON.parse(JSON.stringify(results))); // Store all poses, not just if previous poses exist
-    // Keep only last n poses
+  if(results && results.length > 0 && isRecording) {
+    poseHistory.push(JSON.parse(JSON.stringify(results)));
     if(poseHistory.length > maxHistoryLength) {
       poseHistory.shift();
     }
