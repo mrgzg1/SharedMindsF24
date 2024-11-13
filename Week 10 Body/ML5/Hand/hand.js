@@ -12,6 +12,7 @@ let isRecording = false;
 let camera3D, scene, renderer;
 let posePoints = [];
 let poseLines = [];
+let faceCircle; // Added for face circle
 
 function preload() {
   bodyPose = ml5.bodyPose();
@@ -105,6 +106,11 @@ function updatePoses() {
     if(line.material) line.material.dispose();
     scene.remove(line);
   });
+  if(faceCircle) {
+    if(faceCircle.geometry) faceCircle.geometry.dispose();
+    if(faceCircle.material) faceCircle.material.dispose();
+    scene.remove(faceCircle);
+  }
   posePoints = [];
   poseLines = [];
 
@@ -150,12 +156,45 @@ function updatePoses() {
     const pose = poses[0];
     
     if (pose.keypoints) {
+      // Get face keypoints (0 is nose, 1-4 are eyes and ears)
+      const facePoints = pose.keypoints.slice(0, 5).filter(point => point.confidence > 0.1);
+      
+      if(facePoints.length > 0) {
+        // Calculate center and radius of face circle
+        let centerX = 0, centerY = 0;
+        facePoints.forEach(point => {
+          centerX += point.x;
+          centerY += point.y;
+        });
+        centerX = centerX / facePoints.length;
+        centerY = centerY / facePoints.length;
+        
+        // Calculate radius as distance to furthest face point
+        let maxDist = 0;
+        facePoints.forEach(point => {
+          const dist = Math.sqrt(Math.pow(point.x - centerX, 2) + Math.pow(point.y - centerY, 2));
+          maxDist = Math.max(maxDist, dist);
+        });
+        
+        // Create face circle
+        const circleGeometry = new THREE.CircleGeometry(maxDist * 1.2, 32);
+        const circleMaterial = new THREE.MeshBasicMaterial({
+          color: 0x00ff00,
+          transparent: true,
+          opacity: 0.2,
+          side: THREE.DoubleSide
+        });
+        faceCircle = new THREE.Mesh(circleGeometry, circleMaterial);
+        faceCircle.position.set(centerX - 320, -centerY + 240, 0);
+        scene.add(faceCircle);
+      }
+
       // Draw keypoints as larger spheres
       pose.keypoints.forEach(keypoint => {
         if (keypoint.confidence > 0.1) {
           const geometry = new THREE.SphereGeometry(8); // Larger spheres
           const material = new THREE.MeshPhongMaterial({
-            color: 0x00ff88,
+            color: 0x0088ff, // Changed from green to blue
             emissive: 0x002211
           });
           const sphere = new THREE.Mesh(geometry, material);
