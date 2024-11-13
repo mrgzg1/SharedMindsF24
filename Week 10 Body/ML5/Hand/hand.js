@@ -2,7 +2,7 @@ let video;
 let bodyPose;
 let poses = [];
 let poseHistory = []; // Array to store pose history
-const maxHistoryLength = 30; // Number of past poses to show
+const maxHistoryLength = 80; // Number of past poses to show
 const blurRadius = 20; // Radius for blending poses
 let connections;
 let recordButton;
@@ -57,9 +57,9 @@ function toggleRecording() {
   isRecording = !isRecording;
   if (isRecording) {
     recordButton.html('⏹️'); // Stop symbol
-    poseHistory = []; // Clear history when starting new recording
   } else {
     recordButton.html('⏺️'); // Record symbol
+    poseHistory = []; // Clear history when stopping recording instead
   }
 }
 
@@ -113,7 +113,7 @@ function updatePoses() {
     }
 
     // Draw history trails with fading effect
-    if (isRecording) {
+    if (isRecording && poseHistory.length > 0) { // Check poseHistory length
       poseHistory.forEach((historicalPoses, i) => {
         const opacity = (i + 1) / poseHistory.length;
         const pose = historicalPoses[0];
@@ -123,7 +123,7 @@ function updatePoses() {
             const pointA = pose.keypoints[connection[0]];
             const pointB = pose.keypoints[connection[1]];
             
-            if (pointA.confidence > 0.1 && pointB.confidence > 0.1) {
+            if (pointA && pointB && pointA.confidence > 0.1 && pointB.confidence > 0.1) { // Add null checks
               const material = new THREE.LineBasicMaterial({
                 color: 0xff0000,
                 transparent: true,
